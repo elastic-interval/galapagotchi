@@ -17,6 +17,7 @@ import { FabricInstance } from "../fabric/fabric-instance"
 import { BOOTSTRAP, getCodeFromUrl, ITenscript } from "../fabric/tenscript"
 import { Tensegrity } from "../fabric/tensegrity"
 import { IFace, IInterval, percentToFactor } from "../fabric/tensegrity-types"
+import { FrameCapture } from "../storage/download"
 import {
     getRecentTenscript,
     IFeatureValue,
@@ -122,7 +123,9 @@ export function TensegrityView({eig, floatFeatures, storedState$}: {
         // Object.keys(floatFeatures).map(k => floatFeatures[k]).forEach((feature: FloatFeature) => mainInstance.applyFeature(feature))
         const roleLength = (role: IntervalRole) => roleDefaultFromFeatures(floatFeatures, role)
         const numericFeature = (feature: FabricFeature) => storedState$.getValue().featureValues[feature].numeric
-        setTensegrity(new Tensegrity(roleLength, numericFeature, mainInstance, newTenscript))
+        const newTensegrity = new Tensegrity(roleLength, numericFeature, mainInstance, newTenscript)
+        newTensegrity.capture = new FrameCapture(storedState$.getValue(), 2000)
+        setTensegrity(newTensegrity)
     }
 
     useEffect(() => {
@@ -222,12 +225,7 @@ export function TensegrityView({eig, floatFeatures, storedState$}: {
                             }}>
                                 <FabricView
                                     tensegrity={tensegrity}
-                                    fabricError={error => {
-                                        console.error(error)
-                                        const tenscript = tensegrity.tenscript
-                                        setTensegrity(undefined)
-                                        setTimeout(() => runTenscript(tenscript), 1000)
-                                    }}
+                                    fabricError={error => console.error(error)}
                                     selectedIntervals={selectedIntervals}
                                     selectedFaces={selectedFaces}
                                     setSelectedFaces={setSelectedFaces}

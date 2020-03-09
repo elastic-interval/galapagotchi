@@ -7,7 +7,7 @@ import { Fabric, FabricFeature, IntervalRole, Stage } from "eig"
 import { BehaviorSubject } from "rxjs"
 import { BufferGeometry, Float32BufferAttribute, Vector3 } from "three"
 
-import { IFabricOutput, IOutputInterval, IOutputJoint } from "../storage/download"
+import { FrameCapture, IFabricOutput, IOutputInterval, IOutputJoint } from "../storage/download"
 import { IStoredState } from "../storage/stored-state"
 
 import { intervalRoleName, isPushInterval } from "./eig-util"
@@ -32,15 +32,6 @@ import {
 
 const COUNTDOWN_MAX = 65535
 
-function facePullCountdown(distance: number): number {
-    const countdown = distance * 6000
-    return countdown > COUNTDOWN_MAX ? COUNTDOWN_MAX : countdown
-}
-
-function scaleToStiffness(scale: IPercent): number {
-    return percentToFactor(scale) / 10000
-}
-
 export class Tensegrity {
     public life$: BehaviorSubject<Life>
     public joints: IJoint[] = []
@@ -52,6 +43,7 @@ export class Tensegrity {
     public facesToConnect: IFace[] | undefined
 
     private backup?: Fabric
+    private frameCapture?: FrameCapture
 
     constructor(
         public readonly roleDefaultLength: (intervalRole: IntervalRole) => number,
@@ -64,6 +56,11 @@ export class Tensegrity {
         const brick = new TensegrityBuilder(this).createBrickAt(new Vector3(), percentOrHundred())
         this.bricks = [brick]
         this.activeTenscript = [{tree: this.tenscript.tree, brick, tensegrity: this}]
+    }
+
+    public set capture(frameCapture: FrameCapture) {
+        console.log(`Capturing ${frameCapture.countdown} frames`)
+        this.frameCapture = frameCapture
     }
 
     public get life(): Life {
@@ -254,6 +251,13 @@ export class Tensegrity {
 
     public iterate(): Stage {
         const lifePhase = this.instance.iterate(this.life$.getValue().stage)
+        if (this.frameCapture) {
+            if (!this.frameCapture.captureFrame(this.getFrame(this.frameCapture.storedState))) {
+                console.log("Finished frame capture")
+                this.frameCapture.save()
+                this.frameCapture = undefined
+            }
+        }
         if (lifePhase === Stage.Busy) {
             return lifePhase
         }
@@ -266,7 +270,7 @@ export class Tensegrity {
             }
             if (activeCode.length === 0) {
                 this.activeTenscript = undefined
-                faceStrategies(this.faces, this.tenscript.marks, new TensegrityBuilder(this)).forEach(strategy => strategy.execute())
+                faceStrategies(this.faces, this.tenscript.marks, builder()).forEach(strategy => strategy.execute())
                 if (lifePhase === Stage.Growing) {
                     return this.instance.fabric.finish_growing()
                 }
@@ -327,6 +331,44 @@ export class Tensegrity {
             }),
         }
     }
+
+    public getFrame(storedState: IStoredState): object {
+        const linearDensities = this.instance.floatView.linearDensities
+        return {
+            name: this.tenscript.name,
+            joints: this.joints.map(joint => {
+                const vector = joint.location()
+                return {
+                    index: joint.index,
+                    x: vector.x, y: vector.z, z: vector.y,
+                }
+            }),
+            intervals: this.intervals.map(interval => {
+                const radiusFeature = storedState.featureValues[interval.isPush ? FabricFeature.PushRadius : FabricFeature.PullRadius]
+                const radius = radiusFeature.numeric * linearDensities[interval.index]
+                const jointRadius = radius * storedState.featureValues[FabricFeature.JointRadius].numeric
+                const currentLength = interval.alpha.location().distanceTo(interval.omega.location())
+                const length = currentLength + (interval.isPush ? -jointRadius * 2 : jointRadius * 2)
+                return <IOutputInterval>{
+                    index: interval.index,
+                    joints: [interval.alpha.index, interval.omega.index],
+                    type: interval.isPush ? "Push" : "Pull",
+                    role: intervalRoleName(interval.intervalRole),
+                    isPush: interval.isPush,
+                    length, radius, jointRadius,
+                }
+            }),
+        }
+    }
+}
+
+function facePullCountdown(distance: number): number {
+    const countdown = distance * 6000
+    return countdown > COUNTDOWN_MAX ? COUNTDOWN_MAX : countdown
+}
+
+function scaleToStiffness(scale: IPercent): number {
+    return percentToFactor(scale) / 10000
 }
 
 function faceStrategies(faces: IFace[], marks: Record<number, IMark>, builder: TensegrityBuilder): FaceStrategy[] {
