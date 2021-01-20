@@ -164,7 +164,7 @@ module.exports = function (webpackEnv) {
     ].filter(Boolean),
     output: {
       // The build folder.
-      path: isEnvProduction ? paths.appBuild : undefined,
+      path: isEnvProduction ? paths.appBuild : paths.appBuildNot,
       // Add /* filename */ comments to generated require()s in the output.
       pathinfo: isEnvDevelopment,
       // There will be one main bundle, and one file per asynchronous chunk.
@@ -172,8 +172,7 @@ module.exports = function (webpackEnv) {
       filename: isEnvProduction
           ? 'static/js/[name].[contenthash:8].js'
           : isEnvDevelopment && 'static/js/bundle.js',
-      // TODO: remove this when upgrading to webpack 5
-      futureEmitAssets: true,
+      // There are also additional JS chunk files if you use code splitting.
       // There are also additional JS chunk files if you use code splitting.
       chunkFilename: isEnvProduction
           ? 'static/js/[name].[contenthash:8].chunk.js'
@@ -189,9 +188,6 @@ module.exports = function (webpackEnv) {
                   .replace(/\\/g, '/')
           : isEnvDevelopment &&
           (info => path.resolve(info.absoluteResourcePath).replace(/\\/g, '/')),
-      // Prevents conflicts when multiple Webpack runtimes (from different apps)
-      // are used on the same page.
-      jsonpFunction: `webpackJsonp${appPackageJson.name}`,
     },
     optimization: {
       minimize: isEnvProduction,
@@ -237,9 +233,6 @@ module.exports = function (webpackEnv) {
           // Disabled on WSL (Windows Subsystem for Linux) due to an issue with Terser
           // https://github.com/webpack-contrib/terser-webpack-plugin/issues/21
           parallel: !isWsl,
-          // Enable file caching
-          cache: true,
-          sourceMap: shouldUseSourceMap,
         }),
         // This is only used in production mode
         new OptimizeCSSAssetsPlugin({
@@ -579,7 +572,7 @@ module.exports = function (webpackEnv) {
       // Generate a manifest file which contains a mapping of all asset filenames
       // to their corresponding output file so that tools can pick it up without
       // having to parse `index.html`.
-      new ManifestPlugin({
+      new ManifestPlugin.WebpackManifestPlugin({
         fileName: 'asset-manifest.json',
         publicPath: publicPath,
         generate: (seed, files) => {
@@ -648,14 +641,9 @@ module.exports = function (webpackEnv) {
     // Some libraries import Node modules but don't use them in the browser.
     // Tell Webpack to provide empty mocks for them so importing them works.
     node: {
-      module: 'empty',
-      dgram: 'empty',
-      dns: 'mock',
-      fs: 'empty',
-      http2: 'empty',
-      net: 'empty',
-      tls: 'empty',
-      child_process: 'empty',
+      __dirname: true,
+      __filename: true,
+      global: false
     },
     // Turn off performance processing because we utilize
     // our own hints via the FileSizeReporter
