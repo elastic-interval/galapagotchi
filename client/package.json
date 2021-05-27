@@ -65,7 +65,7 @@
     "react": "^17.0.2",
     "react-app-polyfill": "^1.0.3",
     "react-compound-slider": "^2.5.0",
-    "react-dev-utils": "^9.0.4",
+    "react-dev-utils": "^11.0.4",
     "react-dom": "^17.0.1",
     "react-icons": "^3.7.0",
     "react-popper": "^2.2.4",
